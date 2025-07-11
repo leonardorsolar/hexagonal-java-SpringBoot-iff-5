@@ -10,335 +10,399 @@ Neste projeto, construiremos um **CRUD de Clientes**, explorando todas as camada
 
 ---
 
-## 🔁 Etapa 4: Camada de infrastructure — Criação do Adaptador para Consulta de Endereço via CEP (API Externa - ViaCEP)
+## 🔁 Etapa 5: Camada de _Infrastructure_ — Criação do Adaptador _Repository_
 
-Após modelarmos as classes de domínio `Customer` e `Address`, e o caso de uso `CreateCustomerUseCase`, nosso próximo passo é criar o **adaptador da porta de saída** que irá implementar a interface `AddressLookupOutputPort`.
+Após modelarmos as classes de domínio `Customer` e `Address`, o caso de uso `CreateCustomerUseCase` e o adaptador de saída `AddressLookupOutputPort` para buscar o CEP, nosso próximo passo é criar o **adaptador da porta de saída** responsável por acessar o banco de dados. Esse adaptador será a implementação da interface `CustomerPersistenceOutputPort`.
 
-Este adaptador será responsável por buscar o endereço a partir de um CEP utilizando a **API pública do ViaCEP**.
+-   Será feita uma **implementação concreta do repositório utilizando MongoDB**. `MongoCustomerRepositoryAdapter`
 
----
-
-### 🎯 Objetivo da etapa:
-
-Criar um **cliente HTTP (adaptador)** para:
-
--   ✅ **Isolar a lógica de integração externa**, mantendo o domínio e os casos de uso independentes.
--   ✅ **Permitir testes simples e previsíveis**, substituindo a chamada real por mocks ou fakes durante os testes.
--   ✅ **Desacoplar a aplicação da tecnologia de infraestrutura**, seguindo os princípios da arquitetura hexagonal.
-
----
-
-### ⚠️ Importante:
-
-Como a resposta da API do ViaCEP vem em **formato JSON**, precisaremos criar uma classe auxiliar chamada `ViaCepResponseDTO`, que servirá como **modelo temporário para receber a resposta da API** e convertê-la em um objeto do nosso domínio: `Address`.
-
----
-
-Excelente pergunta para o tutorial! Aqui está uma explicação clara, objetiva e didática:
-
----
-
-### 📌 O que é um adaptador?
-
-Um **adaptador** é uma **classe que conecta a aplicação ao mundo externo**.
-
-Na arquitetura hexagonal, ele é responsável por **implementar uma porta** (interface) definida pela aplicação. O adaptador sabe **como** se comunicar com outras tecnologias, como:
-
--   APIs externas (ex: ViaCEP)
--   Banco de dados
--   Fila de mensagens (ex: Kafka)
--   Interfaces web (ex: controllers)
-
----
-
-### 🔁 Por que usar adaptadores?
-
--   ✅ **Desacoplamento**: sua aplicação não depende diretamente de bibliotecas ou serviços externos.
--   ✅ **Facilidade de testes**: você pode simular (mockar) os adaptadores nos testes.
--   ✅ **Reusabilidade**: você pode trocar a implementação sem mudar a regra de negócio.
-
----
-
-### 🧱 Exemplo no seu projeto
-
-| Componente                | Papel                                             |
-| ------------------------- | ------------------------------------------------- |
-| `AddressLookupOutputPort` | Porta de saída (interface da aplicação)           |
-| `ViaCepAddressAdapter`    | Adaptador (implementa a interface e acessa a API) |
+Esse adaptador terá como responsabilidade realizar operações de persistência e consulta de dados no banco **MongoDB**, conforme definido pelo contrato da interface de saída.
 
 ---
 
 ---
 
-## ✏️ Parte 1: Criação do adaptador de saída do cliente (`ViaCepAddressAdapter`)
-
-> Nesta etapa, já tinhamos uma **porta de saída** chamada `AddressLookupOutputPort`, responsável pela interface de entrada na aplicação
->
-> Sua implementação concreta, chamada `ViaCepAddressAdapter`, realizará a **consulta HTTP à API pública do ViaCEP**, acessando a URL:
->
-> ```
-> https://viacep.com.br/ws/{cep}/json
-> ```
->
-> Exemplo real:
-> [https://viacep.com.br/ws/28300000/json](https://viacep.com.br/ws/28300000/json)
->
-> A resposta da API retorna os dados do endereço no formato JSON, que transformamos em um objeto `Address` do domínio.
->
-> Essa comunicação externa é encapsulada dentro do adaptador, garantindo que o restante da aplicação continue desacoplado da lógica HTTP.
-
-Vamos lá!
-
-Possíveis nomes:
-| Nome da Implementação | Motivo |
-| ------------------------------ | -------------------------------------------------------------------------------- |
-| `AddressLookupRestAdapter` | Se for uma chamada via REST/HTTP para um serviço externo |
-| `ViaCepAddressAdapter` | Se for uma implementação específica que usa a API ViaCEP |
-| `HttpAddressLookupAdapter` | Se a busca for feita via cliente HTTP genérico |
-| `AddressLookupExternalService` | Se quiser indicar que a implementação se conecta a um serviço externo |
-| `AddressLookupRestClient` | Comum quando a implementação usa um client HTTP (como RestTemplate ou WebClient) |
-
-Utilizaremos `ViaCepAddressAdapter`
-
--   Acesse a pasta src/main/java/com/example/hexagonal/infrastructure/adapter/output/client
-
--   Dentro de client crie a classe ViaCepAddressAdapter.java
-
-### 📌 O que essa classe fará?
-
-Ela será responsável por **buscar o endereço do cliente** com base no CEP, consultando uma **API externa (ViaCEP)**. Essa consulta será feita **através de uma porta de saída**, respeitando o princípio de desacoplamento da arquitetura hexagonal.
+Ótima pergunta! Aqui estão os **objetivos da Etapa 5: Criação do Adaptador Repository na camada de Infrastructure**, considerando o uso do MongoDB e os princípios da arquitetura hexagonal:
 
 ---
 
-### 🧱 O que implementar no método:
+### 🎯 Objetivos da Etapa
 
--   O método precisa receber:
+-   ✅ **Implementar o adaptador da porta de saída `CustomerPersistenceOutputPort`**, criando a classe `MongoCustomerRepositoryAdapter` responsável por interagir com o banco de dados MongoDB.
 
-    -   Um **cliente (`Customer`)**
-    -   Um **CEP (`zipCode`)**
+-   ✅ **Garantir o isolamento do domínio em relação à tecnologia de persistência**, mantendo a independência da lógica de negócio em relação ao banco de dados utilizado.
 
--   Dentro do método:
+-   ✅ **Facilitar testes e manutenção**, permitindo que a persistência possa ser facilmente substituída por outra tecnologia (como PostgreSQL, MySQL ou até armazenamento em memória) sem impactar o domínio ou os casos de uso.
 
-    -   Vamos **usar o CEP para buscar o endereço** em uma **aplicação externa** (o microserviço do ViaCEP).
-    -   Essa comunicação será feita através da **porta `AddressLookupOutputPort`**, que será implementada pelo adaptador `ViaCepAddressAdapter`.
+-   ✅ **Aplicar os princípios da arquitetura hexagonal**, desacoplando o núcleo da aplicação das implementações externas.
 
--   Após buscar o endereço:
-
-    -   O endereço será **associado ao cliente**
-    -   E em seguida, o cliente será salvo no banco de dados.
-
-> 💡 Importante: **não acessamos diretamente o banco de dados** nem o serviço externo. Tudo será feito **por meio das portas** (interfaces), mantendo o domínio da aplicação isolado e testável.
+-   ✅ **Encapsular a lógica de acesso ao banco de dados**, concentrando as operações de leitura e escrita em um único componente adaptador, tornando o código mais coeso e reutilizável.
 
 ---
 
-**Passo 1: Criando o adapatdor**
+Perfeito! Abaixo está a versão **ajustada e didática** do tutorial, com explicações claras para iniciantes, seguindo a arquitetura hexagonal e usando Spring Boot + MongoDB:
 
-O adaptador é implementação concreta da porta de saída `AddressLookupOutputPort` da camada application
+---
 
-Mas para utilizarmos o adaptador, precisaríamos também de criar uma classe ViaCepResponseDTO.java que irá converter a resposta em Address.
+## ✅ Configuração da Camada de Persistência com MongoDB (Spring Data)
 
-A API do ViaCEP retorna os dados de endereço em formato JSON. Para que o Java consiga entender e utilizar essa resposta, precisamos de uma classe que represente essa estrutura.
+Vamos configurar o MongoDB como banco de dados para persistir os dados da aplicação. Lembre-se: na arquitetura hexagonal, a **infraestrutura (banco de dados)** deve ser acessada apenas por **adaptadores**, e nunca diretamente pelo domínio ou pelos casos de uso.
 
-Essa classe é chamada de DTO (Data Transfer Object). Ela serve como um "modelo temporário" para receber os dados da API e depois convertê-los em um objeto do nosso domínio (Address).
+---
 
-Onde incluir a classe ViaCepResponse.java?
-Como ela é usada apenas para representar a resposta da API externa (ViaCEP), a melhor prática é colocá-la junto com o adaptador que consome essa API.
+## ✏️ Parte 1: Configuração da URI do MongoDB
 
-src/main/java/com/example/hexagonal/infrastructure/adapter/output/client/ViaCepResponse.java
-
-Assim crie o classe ViaCepResponse.java em client
-
-```lua
-└── infrastructure
-    └── adapter
-        └── output
-            └── client
-                ├── ViaCepAddressAdapter.java   ✅ adaptador da porta
-                └── ViaCepResponse.java         ✅ resposta da API ViaCEP
+Abra o arquivo `application.properties` ou `application.yml` dentro da pasta:
 
 ```
+src/main/resources/
+```
+
+E adicione a URI de conexão com o MongoDB:
+
+### Para `application.properties`:
+
+```properties
+spring.data.mongodb.uri=mongodb://localhost:27017/hexagonal
+```
+
+utilizaremos o de cima do que o arquivo yml
+
+### Para arquivos .yml `application.yml` (alternativa):
+
+```yaml
+spring:
+    data:
+        mongodb:
+            uri: mongodb://localhost:27017/hexagonal
+```
+
+Essa URI diz ao Spring Boot para se conectar a um banco MongoDB rodando localmente na porta 27017, usando o banco chamado `hexagonal`.
+
+---
+
+## ✏️ Parte 2: Criação das classes **Entity**
+
+> No MongoDB, os dados são armazenados em coleções (semelhante a tabelas em bancos relacionais).
+> Essas entidades não fazem parte do **domínio**, pois estão ligadas à forma como os dados são **armazenados**, ou seja, pertencem à **camada de infraestrutura**.
+
+Crie as entidades dentro do pacote:
+
+```
+src/main/java/com/example/hexagonal/infrastructure/adapter/output/repository/entity
+```
+
+### `CustomerEntity.java`
 
 ```java
-package com.example.hexagonal.infrastructure.adapter.output.client;
+package com.example.hexagonal.infrastructure.adapter.output.repository.entity;
 
-public class ViaCepResponseDTO {
+import org.springframework.data.annotation.Id;
+import org.springframework.data.mongodb.core.mapping.Document;
+import lombok.Data;
 
-    private String logradouro;
-    private String localidade;
-    private String uf;
+@Data
+@Document(collection = "customers") // Define o nome da coleção no MongoDB
+public class CustomerEntity {
 
-    public String getLogradouro() {
-        return logradouro;
-    }
+    @Id
+    private String id;
 
-    public void setLogradouro(String logradouro) {
-        this.logradouro = logradouro;
-    }
+    private String name;
 
-    public String getLocalidade() {
-        return localidade;
-    }
+    private AddressEntity address;
 
-    public void setLocalidade(String localidade) {
-        this.localidade = localidade;
-    }
+    private String cpf;
 
-    public String getUf() {
-        return uf;
-    }
-
-    public void setUf(String uf) {
-        this.uf = uf;
-    }
+    private Boolean isValidCpf;
 }
-
 ```
 
-Criamos a classe ViaCepResponseDTO para deserializar a resposta da API externa (ViaCEP) e transformá-la em um Address, que é a classe usada dentro da nossa aplicação.
+Claro! Aqui está uma explicação objetiva e resumida:
 
-Com a classe de conversão pronta, podemo criar a classe ViaCepAddressAdapter
+---
+
+### 🔎 O que é `CustomerEntity.java`?
+
+A classe `CustomerEntity` representa **como o cliente será salvo no MongoDB**.
+
+Ela é uma **entidade da camada de infraestrutura**, usada apenas para persistência dos dados.
+
+---
+
+### 🧱 Detalhes do código:
+
+-   `@Document(collection = "customers")`: indica que os dados serão salvos na coleção `customers` no MongoDB.
+-   `@Id`: define o campo `id` como identificador único do documento.
+-   `AddressEntity`: endereço do cliente, definido como um objeto aninhado.
+
+> 💡 Essa classe não deve ser usada no domínio. Ela é específica para o banco de dados.
+
+Vamos agora criar a classe `AddressEntity.java`
+
+### `AddressEntity.java`
 
 ```java
-package com.example.hexagonal.infrastructure.adapter.output.client;
+package com.example.hexagonal.infrastructure.adapter.output.repository.entity;
 
+import lombok.Data;
+
+@Data
+public class AddressEntity {
+    private String street;
+    private String city;
+    private String state;
+}
+```
+
+---
+
+## ✏️ Parte 3: Criação da Interface de Repositório de mapeamento dos métodos de acesso ao MongoDB
+
+O **Spring Data MongoDB** precisa da **interface** para gerar automaticamente os métodos de acesso ao banco
+
+### 📁 Caminho:
+
+```
+src/main/java/com/example/hexagonal/infrastructure/adapter/output/repository
+```
+
+### 🧱 Passo 1: Interface de Repositório
+
+Essa interface será usada pelo Spring Data para mapear automaticamente os métodos de acesso ao MongoDB:
+
+crie o arquivo MongoCustomerRepository.java em src/main/java/com/example/hexagonal/infrastructure/adapter/output/repository
+
+```java
+package com.example.hexagonal.infrastructure.adapter.output.repository;
+
+import com.example.hexagonal.infrastructure.adapter.output.repository.entity.CustomerEntity;
+import org.springframework.data.mongodb.repository.MongoRepository;
+
+public interface MongoCustomerRepository extends MongoRepository<CustomerEntity, String> {
+}
+```
+
+---
+
+### 🧱 Por que criar a `MongoCustomerRepository.java`?
+
+O **Spring Data MongoDB** precisa dessa **interface** para gerar automaticamente os métodos de acesso ao banco, como:
+
+-   `save()`
+-   `findById()`
+-   `deleteById()`
+-   `findAll()`
+
+---
+
+### ✅ O que ela faz?
+
+Essa interface **conecta o Spring Boot ao MongoDB**, sem que você precise escrever consultas manuais.
+
+> Você só diz **qual entidade** (no caso, `CustomerEntity`) e o **tipo da chave** (`String`), e o Spring cuida do resto.
+
+---
+
+### 📌 Em resumo:
+
+> A `MongoCustomerRepository` é a ponte que o Spring usa para ler e gravar clientes no MongoDB automaticamente.
+
+# Criando o adapatador da porta de saída (CustomerPersistenceOutputPort) de inserção do cliente
+
+## ✏️ Parte 3: Criação do Adaptador de Saída no repositório
+
+> A camada de aplicação já possui uma **porta de saída** chamada `CustomerPersistenceOutputPort`, que define o contrato para salvar o cliente.
+> Agora vamos criar sua implementação concreta, que **interage com o MongoDB**, chamada `MongoCustomerRepositoryAdapter`.
+
+### 🧱 Passo 1: Adaptador `MongoCustomerRepositoryAdapter`
+
+Crie o arquivo MongoCustomerRepositoryAdapter.java em:
+src/main/java/com/example/hexagonal/infrastructure/adapter/output/MongoCustomerRepositoryAdapter.java
+
+Agora sim, o **adaptador real** da porta de saída:
+
+```java
+package com.example.hexagonal.infrastructure.adapter.output;
+
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
-import org.springframework.web.client.RestTemplate;
 
-import com.example.hexagonal.application.port.output.AddressLookupOutputPort;
-import com.example.hexagonal.domain.Address;
+import com.example.hexagonal.application.port.output.CustomerPersistenceOutputPort;
+import com.example.hexagonal.domain.Customer;
+import com.example.hexagonal.infrastructure.adapter.output.repository.MongoCustomerRepository;
+import com.example.hexagonal.infrastructure.adapter.output.repository.entity.CustomerEntity;
+import com.example.hexagonal.infrastructure.adapter.output.repository.mapper.CustomerEntityMapper;
 
+// pensar em nomear MongoCreateCustomerRepositoryAdapter
 @Component
-public class ViaCepAddressAdapter implements AddressLookupOutputPort {
+public class MongoCustomerRepositoryAdapter implements CustomerPersistenceOutputPort {
 
-    private final RestTemplate restTemplate = new RestTemplate();
+    @Autowired
+    private MongoCustomerRepository repository;
+
+    @Autowired
+    private CustomerEntityMapper mapper;
 
     @Override
-    public Address findByZipCode(String zipcode) {
-        String url = "https://viacep.com.br/ws/" + zipcode + "/json";
-        ViaCepResponseDTO response = restTemplate.getForObject(url, ViaCepResponseDTO.class);
-
-        return new Address(
-            response.getLogradouro(),   // street
-            response.getLocalidade(),   // city
-            response.getUf()            // state
-        );
+    public void save(Customer customer) {
+        CustomerEntity entity = mapper.toCustomerEntity(customer);
+        repository.save(entity);
     }
 }
-
 ```
 
-Isso mantém a responsabilidade bem isolada: infraestrutura lida com o mundo externo, enquanto o domínio e a aplicação continuam limpos e desacoplados.
+Foi injetados o repositorio para o método utilizar o repository
 
----
+@Component para a classe ser gerenciada pelo spring
+@Autowired
 
-| Termo técnico                  | Significado claro no tutorial                                  |
-| ------------------------------ | -------------------------------------------------------------- |
-| API externa (external service) | Serviço fora da aplicação que fornece dados via internet       |
-| ViaCEP                         | Serviço gratuito de consulta de endereço via CEP               |
-| Requisição HTTP GET            | Pedido que busca informações em uma URL                        |
-| Porta de saída (OutputPort)    | Interface que define como a aplicação se comunica para fora    |
-| Adaptador (Adapter)            | Classe que implementa uma porta de saída e faz o trabalho real |
-
----
-
----
-
-## ✏️ Parte 2: Criar um teste de integração real (chamando a API)
-
-Agora que temos o `CreateCustomerUseCase` implementado, vamos criar um **teste de integração simples** para garantir que o caso de uso funciona corretamente, integrando a busca de endereço e a persistência do cliente.
-
----
-
-### ✅ Objetivo do teste:
-
--   Cria a instância do adaptador.
--   Executar o método findByZipCode do adaptador passando o cep
--   Confirmar se os dados foram corretos
-
----
-
-### 📁 Local:
-
-Crie o arquivo em:
-`src/test/java/com/example/hexagonal/infrastructure/adapter/output/client/ViaCepAddressAdapterTest.java
-`
-
----
-
-### 🧪 Código do teste:
+compare a diferença de utilização ou não decorator do spring boot.
 
 ```java
-package com.example.hexagonal;
+@Component
+public class MongoCustomerRepositoryAdapter implements CustomerPersistenceOutputPort {
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
+    private final MongoCustomerRepository repository;
 
-import org.junit.jupiter.api.Test;
+    private final CustomerEntityMapper mapper;
 
-import com.example.hexagonal.domain.Address;
-import com.example.hexagonal.infrastructure.adapter.output.client.ViaCepAddressAdapter;
+    public MongoCustomerRepositoryAdapter(MongoCustomerRepository repository, CustomerEntityMapper mapper) {
+        this.repository = repository;
+        this.mapper = mapper;
+    }
 
-public class ViaCepAddressAdapterTest {
-
-    @Test
-    void deveBuscarEnderecoRealDaApiViaCep() {
-        // Arrange
-        ViaCepAddressAdapter adapter = new ViaCepAddressAdapter();
-
-        // Act
-        Address address = adapter.findByZipCode("28300000"); // CEP válido da Praça da Sé - SP
-
-        System.out.println("Estado: " + address.getCity());
-        System.out.println("UF: " + address.getState());
-
-        // Assert
-        assertNotNull(address);
-        assertEquals("Itaperuna", address.getCity());
-        assertEquals("RJ", address.getState());
-        // logradouro pode variar, então não fixamos aqui
+    @Override
+    public void save(Customer customer) {
+        CustomerEntity entity = mapper.toCustomerEntity(customer);
+        repository.save(entity);
     }
 }
-
-
 ```
 
-No terminal, execute na raiz do projeto:
+Oberve abaixo:
 
-```bash
-mvn test
+```java
+@Override
+    public void save(Customer customer) {
+        MongoCustomerRepository.save();
+
+    }
 ```
 
-Para rodar somente o teste da classe AddressTest.java com Maven, use o seguinte comando:
+Quando criamos o MongoCustomerRepository, criamos as classe de entidades CustomerEntity e AddressEntity
+A classe CustomerEntity que será salva na base de dados.
+Para que possamos salvar, tereos que criar um mapper para transforma customer em CustomerEntity
 
-```bash
-mvn -Dtest=ViaCepAddressAdapterTest test
+```java
+ @Override
+    public void save(Customer customer) {
+        CustomerEntity entity = mapper.toCustomerEntity(customer);
+        repository.save(entity);
+    }
+```
+
+Assim está pronto no adapatador de inserção de cliente
+
+---
+
+## ✅ Observação sobre o Mapper
+
+Como estamos convertendo entre `Customer` (domínio) e `CustomerEntity` (infra), é recomendado criar um **mapper**.
+
+---
+
+## 🛠️ Crie o arquivo:
+
+`src/main/java/com/example/hexagonal/infrastructure/adapter/output/repository/mapper/CustomerEntityMapper.java`
+
+Usando o Spring boot:
+
+```java
+package com.example.hexagonal.infrastructure.adapter.output.repository.mapper;
+
+import com.example.hexagonal.domain.Customer;
+import com.example.hexagonal.infrastructure.adapter.output.repository.entity.CustomerEntity;
+import org.mapstruct.Mapper;
+
+@Mapper(componentModel = "spring")
+public interface CustomerEntityMapper {
+
+    // eu recebo um Customer e retorno um CustomerEntity
+    CustomerEntity toCustomerEntity(Customer customer);
+
+}
+```
+
+Vamos optar com spring boot, mas veja o sem Spring boot:
+
+```java
+package com.example.hexagonal.infrastructure.adapter.output.repository.mapper;
+
+import org.springframework.stereotype.Component;
+
+import com.example.hexagonal.domain.Address;
+import com.example.hexagonal.domain.Customer;
+import com.example.hexagonal.infrastructure.adapter.output.repository.entity.AddressEntity;
+import com.example.hexagonal.infrastructure.adapter.output.repository.entity.CustomerEntity;
+
+@Component
+public class CustomerEntityMapper {
+
+    // Domínio -> Entidade (para salvar no banco)
+    public CustomerEntity toEntity(Customer customer) {
+        AddressEntity addressEntity = new AddressEntity();
+        addressEntity.setStreet(customer.getAddress().getStreet());
+        addressEntity.setCity(customer.getAddress().getCity());
+        addressEntity.setState(customer.getAddress().getState());
+
+        CustomerEntity entity = new CustomerEntity();
+        entity.setId(customer.getId());
+        entity.setName(customer.getName());
+        entity.setCpf(customer.getCpf());
+        entity.setIsValidCpf(customer.getIsValidCpf());
+        entity.setAddress(addressEntity);
+
+        return entity;
+    }
+
+    // Entidade -> Domínio (para uso na aplicação)
+    public Customer toDomain(CustomerEntity entity) {
+        Address address = new Address();
+        address.setStreet(entity.getAddress().getStreet());
+        address.setCity(entity.getAddress().getCity());
+        address.setState(entity.getAddress().getState());
+
+        Customer customer = new Customer();
+        customer.setId(entity.getId());
+        customer.setName(entity.getName());
+        customer.setCpf(entity.getCpf());
+        customer.setIsValidCpf(entity.getIsValidCpf());
+        customer.setAddress(address);
+
+        return customer;
+    }
+}
 ```
 
 ---
 
-## Explicação rápida do teste de integração
+### ✅ O que faz o `CustomerEntityMapper`?
 
-Este teste verifica se o adaptador `ViaCepAddressAdapter` consegue buscar um endereço real usando a API pública do ViaCEP.
+| Método       | Função                                                                                  |
+| ------------ | --------------------------------------------------------------------------------------- |
+| `toEntity()` | Converte um `Customer` (domínio) em `CustomerEntity` (infra) para **salvar no banco**   |
+| `toDomain()` | Converte um `CustomerEntity` (infra) em `Customer` (domínio) para **usar na aplicação** |
 
--   **Arrange:** Cria a instância do adaptador.
--   **Act:** Chama o método `findByZipCode` com um CEP válido.
--   **Assert:** Confirma que o endereço retornado não é nulo e que a cidade e estado correspondem ao esperado.
-
-Esse teste valida a integração com o serviço externo ViaCEP, garantindo que a comunicação e o mapeamento do JSON para o objeto `Address` funcionem corretamente.
+> 💡 Ele mantém o **domínio independente da tecnologia de persistência**, seguindo a proposta da arquitetura hexagonal.
 
 ---
 
-**Observações:** Use com cuidado: se a API do ViaCEP estiver fora do ar, o teste vai falhar.
+## ✏️ Parte 4: Criar um teste de integração real (chamando a API)
+
+Em construção
 
 ### 📌 Próximos passos:
-
-5. **Implementar o Adapter (porta de saída) - repositório**
-
-    - Implementação concreta do repositório usando MongoDB.
-
-6. **Criar o Adapter de inserção do cliente**
-
-    - Para expor o endpoint REST e permitir a criação de clientes via HTTP.
 
 7. **Criar o Controller (porta de entrada)**
 
